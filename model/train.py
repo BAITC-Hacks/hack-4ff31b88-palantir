@@ -95,16 +95,19 @@ def main() -> None:
     # мощность из почасовой SCADA и считаем сравнение с тремя бейзлайнами.
     from model.baseline_nwp import climatology, fit_curves, persistence, predict as curve_predict
     feb["power"] = scada["power"].reindex(pd.to_datetime(feb["target_time"])).to_numpy()
+    feb_eval = feb.loc[pd.to_datetime(feb["target_time_local"]).between(
+        pd.Timestamp("2026-02-01"), pd.Timestamp("2026-03-01"), inclusive="left"
+    )].copy()
     curves = fit_curves(train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START])
     feb["power_curve"] = curve_predict(feb, curves)["power_pred"].to_numpy()
     fit = train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START]
     feb["climatology"] = climatology(fit, feb).to_numpy()
     feb["persistence"] = persistence(feb, scada).to_numpy()
     feb_metrics = pd.concat([
-        metric_rows(feb, "power_pred", "lightgbm", "power"),
-        metric_rows(feb, "power_curve", "power_curve", "power"),
-        metric_rows(feb, "climatology", "climatology", "power"),
-        metric_rows(feb, "persistence", "persistence", "power"),
+        metric_rows(feb_eval, "power_pred", "lightgbm", "power"),
+        metric_rows(feb_eval, "power_curve", "power_curve", "power"),
+        metric_rows(feb_eval, "climatology", "climatology", "power"),
+        metric_rows(feb_eval, "persistence", "persistence", "power"),
     ], ignore_index=True)
     feb_metrics.to_csv(MODEL_DIR / "metrics_february.csv", index=False)
     print(f"Обучение: {fit_rows} строк, признаков: {len(features)}")
