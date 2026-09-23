@@ -1,5 +1,5 @@
 data/cache/
-data/cache_mock/
+.git
 __pycache__/
 *.pyc
 api/state.sqlite
