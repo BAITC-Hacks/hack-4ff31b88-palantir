@@ -118,7 +118,9 @@ def main() -> None:
     # 5. Test: февраль 2026, только признаки
     print("[5/5] Собираю test_features (февраль 2026)")
     T = assemble(archives, daily_issues(C.TEST_FIRST_ISSUE, C.TEST_LAST_ISSUE))
-    check_no_leakage(T)
+    margins = check_no_leakage(T)
+    print("  запас между выходом последнего использованного прогона и выпуском прогноза: "
+          + ", ".join(f"{m.upper()} ≥ {h:g} ч" for m, h in margins.items()))
     T = add_features(T, offset)
     T.to_parquet(C.PROCESSED_DIR / "test_features.parquet", index=False)
 
@@ -129,6 +131,7 @@ def main() -> None:
         "models": {p: C.MODELS[p] for p in archives},
         "issue_hour_utc": C.ISSUE_HOUR_UTC,
         "publish_delay_h": C.PUBLISH_DELAY_H,
+        "leakage_margin_h": margins,
         "horizon_h": C.HORIZON_H,
         "train_rows": len(train),
         "train_period_utc": [str(train["target_time"].min()), str(train["target_time"].max())],
