@@ -1,0 +1,21 @@
+{
+  "mode": "lightgbm",
+  "provenance": {
+    "weather": "Open-Meteo Previous Runs",
+    "model": "lightgbm",
+    "utc_offset_h": 6,
+    "training_available_through": "2025-12-31T18:00:00+00:00",
+    "model_sha256": "5fda036e74535b3280c4578a10f4045bfccad11b9dbf579463449a97de750495"
+  },
+  "first_issue_date": "2026-01-31",
+  "last_issue_date": "2026-02-28",
+  "issue_hour_utc": 0,
+  "scada_offset_h": 6,
+  "runs": 29,
+  "accepted_runs": 29,
+  "replaced_points": 672,
+  "changed_points": 672,
+  "february_hours": 672,
+  "expected_february_hours": 672,
+  "complete": true
+}
