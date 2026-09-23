@@ -1,4 +1,4 @@
-"""Ежедневный бэктест агента на заглушках по календарю data.config."""
+"""Ежедневный бэктест агента по календарю data.config."""
 from __future__ import annotations
 
 import argparse
@@ -18,10 +18,11 @@ def stub_forecast(issue_time):
 
 
 def run_backtest(output, *, forecast_fn=stub_forecast, start=None, end=None,
-                 issue_hour=None, scada_offset=None, jump=0.30, revision=0.15, llm_model=None):
+                 issue_hour=None, scada_offset=None, jump=0.30, revision=0.15, llm_model=None,
+                 mode='stub', provenance=None):
     """Один ряд станции. callback получает виртуальное UTC-время, возвращает список.
 
-    Этот этап проверяет механику на заглушках, а не качество реальной модели.
+    По умолчанию проверяется механика на заглушках; CLI --mode подключает модель.
     Обновление актуального прогноза и журнал фиксируются одной транзакцией.
     """
     start = date.fromisoformat(start or C.TEST_FIRST_ISSUE)
@@ -57,7 +58,7 @@ def run_backtest(output, *, forecast_fn=stub_forecast, start=None, end=None,
                 report = analyze([], expected, previous, jump=jump, revision=revision)
                 report["errors"].insert(0, {"rule": "pipeline_error", "error_type": type(exc).__name__})
             report["summary"] = summarize(report, llm_model)
-            record = {"mode": "stub", "issue_time": issue.isoformat(),
+            record = {"mode": mode, "provenance": provenance or {}, "issue_time": issue.isoformat(),
                       "replaced_points": report["overlap_points"] if report["accepted"] else 0,
                       "analysis": report}
             with conn:
@@ -89,7 +90,7 @@ def run_backtest(output, *, forecast_fn=stub_forecast, start=None, end=None,
                                          lead_hour=int((utc(point["target_time"]) - utc(r["issue_time"])).total_seconds() / 3600) + 1))
         (output / "runs.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False, allow_nan=False) + "\n"
                                                    for r in records), encoding="utf-8")
-        summary = {"mode": "stub", "first_issue_date": start.isoformat(), "last_issue_date": end.isoformat(),
+        summary = {"mode": mode, "provenance": provenance or {}, "first_issue_date": start.isoformat(), "last_issue_date": end.isoformat(),
                    "issue_hour_utc": hour, "scada_offset_h": offset,
                    "runs": len(records), "accepted_runs": sum(r["analysis"]["accepted"] for r in records),
                    "replaced_points": sum(r["replaced_points"] for r in records),
@@ -109,9 +110,17 @@ def main():
     parser.add_argument("--jump", type=float, default=0.30)
     parser.add_argument("--revision", type=float, default=0.15)
     parser.add_argument("--llm-model")
+    parser.add_argument('--mode', choices=['stub', 'baseline', 'lightgbm'], default='stub')
+    parser.add_argument('--trained-through', help='UTC availability of last training label, confirmed by model owner')
     args = parser.parse_args()
+    provider = stub_forecast
+    if args.mode != 'stub':
+        from agent_real import build_forecaster
+        provider = build_forecaster(args.mode, args.start or C.TEST_FIRST_ISSUE,
+                                    args.end or C.TEST_LAST_ISSUE, trained_through=args.trained_through)
     result = run_backtest(args.out, start=args.start, end=args.end,
-                          jump=args.jump, revision=args.revision, llm_model=args.llm_model)
+                          jump=args.jump, revision=args.revision, llm_model=args.llm_model,
+                          forecast_fn=provider, mode=args.mode, provenance=getattr(provider, 'provenance', None))
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["complete"] and result["accepted_runs"] == result["runs"] else 2
 

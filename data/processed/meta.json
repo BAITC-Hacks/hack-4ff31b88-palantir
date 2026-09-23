@@ -44,6 +44,10 @@
   },
   "issue_hour_utc": 0,
   "publish_delay_h": 8,
+  "leakage_margin_h": {
+    "ecmwf": 3.08,
+    "gfs": 6.0
+  },
   "horizon_h": 48,
   "train_rows": 35076,
   "train_period_utc": [
@@ -83,5 +87,5 @@
     "doy_cos",
     "month"
   ],
-  "built_at": "2026-09-23T09:26:45.467222+00:00"
+  "built_at": "2026-09-23T09:59:43.898210+00:00"
 }
