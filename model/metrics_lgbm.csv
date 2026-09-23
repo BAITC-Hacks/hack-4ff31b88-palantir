@@ -1,0 +1,4 @@
+model,horizon,nMAE_%,nRMSE_%,bias_%,n
+lightgbm,1-24h,16.14,23.58,5.91,744
+lightgbm,25-48h,16.84,24.23,5.85,744
+lightgbm,all,16.49,23.91,5.88,1488

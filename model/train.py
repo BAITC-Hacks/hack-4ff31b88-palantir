@@ -46,6 +46,8 @@ def metric_rows(df: pd.DataFrame, pred_col: str = "power_pred",
 
 
 def train_model(train: pd.DataFrame, features: list[str]):
+    """Обучает LightGBM через родной API (lgb.train): не зависит от scikit-learn,
+    поэтому не ломается при несовместимых версиях sklearn."""
     try:
         import lightgbm as lgb
     except ImportError as exc:
@@ -53,11 +55,11 @@ def train_model(train: pd.DataFrame, features: list[str]):
     fit = train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START]
     # Часы простоя/ограничений в power_clean пустые: LightGBM не принимает NaN в цели.
     fit = fit.dropna(subset=[TARGET])
-    model = lgb.LGBMRegressor(objective="regression_l1", n_estimators=700,
-                               learning_rate=0.03, num_leaves=31,
-                               subsample=0.85, subsample_freq=1, colsample_bytree=0.9,
-                               reg_lambda=1.0, random_state=42, verbosity=-1)
-    model.fit(_numeric_frame(fit, features), fit[TARGET].clip(0, 1))
+    params = {"objective": "regression_l1", "learning_rate": 0.03, "num_leaves": 31,
+              "bagging_fraction": 0.85, "bagging_freq": 1, "feature_fraction": 0.9,
+              "lambda_l2": 1.0, "seed": 42, "verbosity": -1}
+    data = lgb.Dataset(_numeric_frame(fit, features), label=fit[TARGET].clip(0, 1))
+    model = lgb.train(params, data, num_boost_round=700)
     return model, len(fit)
 
 
@@ -71,7 +73,7 @@ def predict(df: pd.DataFrame, model=None) -> pd.DataFrame:
         features = json.loads(FEATURES_PATH.read_text(encoding="utf-8"))
         model = lgb.Booster(model_file=str(MODEL_PATH))
     else:
-        features = list(getattr(model, "feature_name_", [])) or json.loads(
+        features = list(model.feature_name()) if hasattr(model, "feature_name") else json.loads(
             FEATURES_PATH.read_text(encoding="utf-8"))
     out = df.copy()
     out["power_pred"] = np.clip(model.predict(_numeric_frame(out, features)), 0, 1)
@@ -84,7 +86,7 @@ def main() -> None:
     scada = pd.read_parquet(C.PROCESSED_DIR / "scada_hourly.parquet")
     features = [c for c in feature_columns(train) if c != "day_offset"]
     model, fit_rows = train_model(train, features)
-    model.booster_.save_model(str(MODEL_PATH))
+    model.save_model(str(MODEL_PATH))
     FEATURES_PATH.write_text(json.dumps(features, ensure_ascii=False, indent=2), encoding="utf-8")
     valid = train.loc[pd.to_datetime(train["target_time_local"]).between(
         VALID_START, VALID_END, inclusive="left")].copy()

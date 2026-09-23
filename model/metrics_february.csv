@@ -1,0 +1,13 @@
+model,horizon,nMAE_%,nRMSE_%,bias_%,n
+lightgbm,1-24h,,,,0
+lightgbm,25-48h,,,,0
+lightgbm,all,,,,0
+power_curve,1-24h,,,,0
+power_curve,25-48h,,,,0
+power_curve,all,,,,0
+climatology,1-24h,,,,0
+climatology,25-48h,,,,0
+climatology,all,,,,0
+persistence,1-24h,,,,0
+persistence,25-48h,,,,0
+persistence,all,,,,0
