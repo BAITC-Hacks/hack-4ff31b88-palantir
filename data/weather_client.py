@@ -161,13 +161,39 @@ def assemble(archives: dict[str, pd.DataFrame], issue_times: Iterable,
     return grid
 
 
-def check_no_leakage(df: pd.DataFrame, delay_h: int = C.PUBLISH_DELAY_H) -> None:
-    """Каждый лид использует прогон, опубликованный до issue_time."""
-    run_start_latest = df["target_time"] + pd.Timedelta(hours=1) - pd.to_timedelta(24 * df["day_offset"], unit="h")
-    published = run_start_latest + pd.Timedelta(hours=delay_h)
-    bad = published > df["issue_time"]
-    if bad.any():
-        raise AssertionError(f"Утечка: {int(bad.sum())} строк используют прогон, опубликованный после issue_time")
+# Фактическое время выхода прогонов после старта (среднее по наблюдениям
+# wethr.net/model-schedule): ECMWF IFS open data ≈ 7 ч 55 мин, GFS ≈ 5 ч.
+# Плюс час на обработку в Open-Meteo. Прогоны стартуют каждые 6 ч (00/06/12/18 UTC).
+RUN_INTERVAL_H = 6
+REAL_PUBLICATION_H = {"ecmwf": 7 + 55 / 60, "gfs": 5.0}
+INGEST_MARGIN_H = 1.0
+
+
+def check_no_leakage(df: pd.DataFrame, delay_h: int = C.PUBLISH_DELAY_H) -> dict[str, float]:
+    """Проверяет, что каждый использованный прогон реально вышел до issue_time.
+
+    Для цели v с day_offset=N Open-Meteo берёт прогон, стартовавший не позже
+    v − 24·N, то есть самый поздний возможный старт — это v − 24·N, округлённое
+    вниз до сетки прогонов (00/06/12/18 UTC). К нему прибавляем фактическую
+    задержку публикации модели и час на обработку. Возвращает минимальный запас
+    в часах по каждой модели; если запас отрицательный — AssertionError.
+    """
+    last_instant = df["target_time"] + pd.Timedelta(hours=1)  # правая граница часа
+    run_start = (last_instant - pd.to_timedelta(24 * df["day_offset"], unit="h")).dt.floor(f"{RUN_INTERVAL_H}h")
+    margins = {}
+    for model, pub_h in REAL_PUBLICATION_H.items():
+        available = run_start + pd.Timedelta(hours=pub_h + INGEST_MARGIN_H)
+        margin_h = (df["issue_time"] - available) / pd.Timedelta(hours=1)
+        margins[model] = round(float(margin_h.min()), 2)
+        bad = margin_h < 0
+        if bad.any():
+            raise AssertionError(f"Утечка ({model}): {int(bad.sum())} строк используют прогон, "
+                                 f"опубликованный после issue_time")
+    # Правило выбора day_offset само по себе тоже не должно нарушаться
+    rule_start = last_instant - pd.to_timedelta(24 * df["day_offset"], unit="h")
+    if (rule_start + pd.Timedelta(hours=delay_h) > df["issue_time"]).any():
+        raise AssertionError("Нарушено правило N = ceil((L + delay) / 24)")
+    return margins
 
 
 # ------------------------------------------------------------- API для агента
