@@ -1,5 +1,0 @@
-data/cache/
-.git
-__pycache__/
-*.pyc
-api/state.sqlite

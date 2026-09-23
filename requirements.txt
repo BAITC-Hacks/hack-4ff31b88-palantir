@@ -4,6 +4,3 @@ requests>=2.31
 pyarrow>=14
 lightgbm>=4.0
 streamlit>=1.40
-fastapi>=0.110
-uvicorn>=0.29
-openai>=1.40
