@@ -84,14 +84,23 @@ def show_chart(chart) -> None:
 
 
 # ------------------------------------------------------------------- данные
+def mtime(path: Path) -> float:
+    """Время изменения файла — часть ключа кэша: новый файл сразу перечитывается."""
+    return path.stat().st_mtime if path.exists() else 0.0
+
+
 @st.cache_data
-def load_parquet(name: str) -> pd.DataFrame | None:
+def _load_parquet(name: str, _mtime: float) -> pd.DataFrame | None:
     p = C.PROCESSED_DIR / name
     return pd.read_parquet(p) if p.exists() else None
 
 
+def load_parquet(name: str) -> pd.DataFrame | None:
+    return _load_parquet(name, mtime(C.PROCESSED_DIR / name))
+
+
 @st.cache_data
-def load_forecasts() -> dict[str, pd.DataFrame]:
+def _load_forecasts(_mtimes: tuple) -> dict[str, pd.DataFrame]:
     out = {}
     for name, path in FORECAST_FILES.items():
         if path.exists():
@@ -100,7 +109,10 @@ def load_forecasts() -> dict[str, pd.DataFrame]:
     return out
 
 
-@st.cache_data
+def load_forecasts() -> dict[str, pd.DataFrame]:
+    return _load_forecasts(tuple(mtime(p) for p in FORECAST_FILES.values()))
+
+
 def load_metrics() -> pd.DataFrame | None:
     parts = []
     for f in ["metrics_baseline.csv", "metrics_lgbm.csv"]:
@@ -126,10 +138,16 @@ def run_checks(fc: pd.DataFrame, prev: pd.DataFrame | None) -> list[tuple[str, s
     Возвращает (статус, проверка, пояснение); статус: ok / warn.
     """
     res = []
-    p = fc["power_pred"]
+    p = fc["power_pred"] if "power_pred" in fc else pd.Series(dtype=float)
+    n_ok = int(p.notna().sum())
+    res.append(("ok" if n_ok == C.HORIZON_H and len(p) == C.HORIZON_H else "warn",
+                f"Полный горизонт {C.HORIZON_H} ч",
+                f"{n_ok} из {C.HORIZON_H} часов с прогнозом" + ("" if n_ok == C.HORIZON_H else " — прогноз неполный")))
+    if n_ok == 0:
+        return res  # пустой прогноз: остальные проверки не имеют смысла
     bad = int(((p < 0) | (p > 1) | p.isna()).sum())
     res.append(("ok" if bad == 0 else "warn", "Значения в диапазоне 0–100%",
-                "все 48 часов в диапазоне" if bad == 0 else f"{bad} ч вне диапазона или пустые"))
+                "все значения в диапазоне" if bad == 0 else f"{bad} ч вне диапазона или пустые"))
     jumps = int((p.diff().abs() > JUMP_ALERT).sum())
     res.append(("ok" if jumps == 0 else "warn", f"Нет скачков больше {JUMP_ALERT:.0%} за час",
                 "ход прогноза плавный" if jumps == 0 else f"резких скачков: {jumps} — проверить погоду"))
@@ -202,7 +220,8 @@ with tab_fc:
     main = main[main["issue_time"] == issue].sort_values("lead_hour")
     d1, d2 = main[main["lead_hour"] <= 24], main[main["lead_hour"] > 24]
     peak = main.loc[main["power_pred"].idxmax()] if len(main) else None
-    spread_hours = int((wx["ens_ws100_spread"] > SPREAD_ALERT_MS).sum()) if len(wx) else 0
+    spread = wx["ens_ws100_spread"] if "ens_ws100_spread" in wx else pd.Series(0.0, index=wx.index)
+    spread_hours = int((spread > SPREAD_ALERT_MS).sum()) if len(wx) else 0
 
     c = st.columns(4)
     c[0].metric("Средняя загрузка, 1–24 ч", pct(d1["power_pred"].mean()))
@@ -216,16 +235,16 @@ with tab_fc:
     show_chart(line_chart(power_long, "Мощность, %", ".0f", y_domain=[0, 100]))
 
     st.subheader("Прогноз ветра на 100 м: ECMWF и GFS")
-    wind_long = pd.concat([
-        pd.DataFrame({"time": wx["target_time_local"], "series": "ECMWF", "value": wx["ecmwf_ws100"]}),
-        pd.DataFrame({"time": wx["target_time_local"], "series": "GFS", "value": wx["gfs_ws100"]}),
-    ]) if {"ecmwf_ws100", "gfs_ws100"} <= set(wx.columns) else pd.DataFrame(columns=["time", "series", "value"])
+    wind_parts = [pd.DataFrame({"time": wx["target_time_local"], "series": name, "value": wx[col]})
+                  for name, col in [("ECMWF", "ecmwf_ws100"), ("GFS", "gfs_ws100")] if col in wx]
+    wind_long = pd.concat(wind_parts) if wind_parts else pd.DataFrame(columns=["time", "series", "value"])
     show_chart(line_chart(wind_long.dropna(), "Ветер, м/с", ".1f", height=220))
     st.caption("Когда модели сильно расходятся, прогноз менее надёжен — агент отмечает такие часы.")
 
     with st.expander("Таблица прогноза"):
+        wx_cols = ["target_time_local"] + [c for c in ["ecmwf_ws100", "gfs_ws100", "ens_ws100_spread"] if c in wx]
         table = main[["target_time_local", "lead_hour", "power_pred"]].merge(
-            wx[["target_time_local", "ecmwf_ws100", "gfs_ws100", "ens_ws100_spread"]], on="target_time_local", how="left")
+            wx[wx_cols], on="target_time_local", how="left")
         table = table.rename(columns={"target_time_local": "Время (местное)", "lead_hour": "Лид, ч",
                                       "power_pred": "Мощность, доля", "ecmwf_ws100": "ECMWF, м/с",
                                       "gfs_ws100": "GFS, м/с", "ens_ws100_spread": "Разброс, м/с"})
@@ -236,7 +255,8 @@ with tab_fc:
 # ---- 2. проверки
 with tab_check:
     st.subheader(f"Анализ выпуска {labels[issue]}")
-    fc = main.merge(wx[["target_time", "ens_ws100_spread"]], on="target_time", how="left")
+    fc = main.merge(wx[["target_time"] + (["ens_ws100_spread"] if "ens_ws100_spread" in wx else [])],
+                    on="target_time", how="left")
     prev_issue = [t for t in issues if t < issue]
     prev = forecasts[main_name]
     prev = prev[prev["issue_time"] == prev_issue[-1]] if prev_issue else None

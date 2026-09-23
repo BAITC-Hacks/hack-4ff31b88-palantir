@@ -88,8 +88,13 @@ def main() -> None:
     model, fit_rows = train_model(train, features)
     model.save_model(str(MODEL_PATH))
     FEATURES_PATH.write_text(json.dumps(features, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Последний обучающий час (31.12 23:00 по времени SCADA) закончился в VALID_START
+    # по местному времени. Выпуски раньше этого момента не знали часть обучающих
+    # данных, поэтому в валидацию берём только выпуски не раньше конца обучения.
+    train_end_utc = VALID_START - pd.Timedelta(hours=C.utc_offset_h())
     valid = train.loc[pd.to_datetime(train["target_time_local"]).between(
-        VALID_START, VALID_END, inclusive="left")].copy()
+        VALID_START, VALID_END, inclusive="left")
+        & (pd.to_datetime(train["issue_time"]) >= train_end_utc)].copy()
     # Оцениваем по фактической мощности power — так же, как бейзлайны в baseline_nwp.
     metrics = metric_rows(predict(valid, model), target_col="power")
     metrics.to_csv(METRICS_PATH, index=False)

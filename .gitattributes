@@ -2,3 +2,5 @@
 * text=auto
 *.parquet binary
 *.sqlite binary
+# Файл модели хранится байт в байт: его SHA256 записан в журнале агента
+model/lightgbm_model.txt -text

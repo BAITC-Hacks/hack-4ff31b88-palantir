@@ -71,7 +71,8 @@ def station_hourly(offset_h: int, raw_dir: Path = C.RAW_DIR) -> pd.DataFrame:
     parts = {}
     for k, f in files.items():
         h = to_hourly_local(load_turbine(f))
-        h["anom"] = flag_anomalies(h, power_curve(h))
+        fit_part = h[h.index < pd.Timestamp(C.VALID_START_LOCAL)]  # январь не участвует в построении кривой
+        h["anom"] = flag_anomalies(h, power_curve(fit_part))
         parts[k] = h
     df = pd.concat(parts, axis=1)
     df.columns = [f"{c}_{k}" for k, c in df.columns]

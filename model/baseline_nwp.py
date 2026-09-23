@@ -106,7 +106,8 @@ def main() -> None:
     issue_local = pd.to_datetime(train_all["issue_time"]) + (local - pd.to_datetime(train_all["target_time"]))
     # в обучение — только выпуски, у которых весь горизонт до начала валидации
     tr = train_all[issue_local + pd.Timedelta(hours=C.HORIZON_H) <= VALID_START_LOCAL]
-    va = train_all[local >= VALID_START_LOCAL].copy()
+    # валидация — только выпуски после окончания обучающих данных (как в model/train.py)
+    va = train_all[(local >= VALID_START_LOCAL) & (issue_local >= VALID_START_LOCAL)].copy()
     print(f"train: {len(tr)} строк ({tr['target_time_local'].min():%Y-%m-%d} … {tr['target_time_local'].max():%Y-%m-%d}), "
           f"valid: {len(va)} строк (январь 2026)")
 
