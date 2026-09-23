@@ -31,16 +31,19 @@ streamlit run app/dashboard.py
 persistence, climatology и power curve за февраль в `model/metrics_february.csv`
 с разбиением на горизонты 1–24 и 25–48 часов.
 
-Бейзлайны на январе 2026:
+Метрики на январе 2026 (валидация, nMAE в % от установленной мощности, меньше — лучше):
 
 | Модель | 1–24 ч | 25–48 ч | Все горизонты |
 |---|---:|---:|---:|
 | Persistence | 30.83% | 36.55% | 33.69% |
 | Climatology | 29.40% | 29.40% | 29.40% |
 | Power curve | 21.35% | 21.53% | 21.44% |
+| **LightGBM** | **16.14%** | **16.84%** | **16.49%** |
 
 Метрики считаются по фактической мощности `power`, время SCADA — UTC+6
-(см. [раздел о данных](data/README_data.md)). Пересчёт: `python -m model.baseline_nwp`.
+(см. [раздел о данных](data/README_data.md)). Пересчёт: `python -m model.baseline_nwp` и `python -m model.train`.
+
+LightGBM снижает ошибку на 5 п.п. относительно кривой мощности по прогнозу ветра и почти вдвое относительно persistence.
 
 ## Проверка по критериям кейса
 
