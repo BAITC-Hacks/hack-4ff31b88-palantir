@@ -1,0 +1,10 @@
+model,horizon,nMAE_%,nRMSE_%,bias_%,n
+persistence,1-24h,30.53,43.92,-8.84,744
+persistence,25-48h,33.76,45.61,-8.66,744
+persistence,all,32.14,44.78,-8.75,1488
+climatology,1-24h,29.4,33.73,3.94,744
+climatology,25-48h,29.4,33.73,3.94,744
+climatology,all,29.4,33.73,3.94,1488
+power_curve,1-24h,21.81,30.92,13.33,744
+power_curve,25-48h,21.92,30.92,10.79,744
+power_curve,all,21.86,30.92,12.06,1488
