@@ -1,0 +1,87 @@
+{
+  "utc_offset_h": 7,
+  "utc_offset_detected_h": 7,
+  "tz_check": [
+    {
+      "utc_offset_h": 3,
+      "corr_temp_diurnal": 0.4548,
+      "corr_wind": 0.6195
+    },
+    {
+      "utc_offset_h": 4,
+      "corr_temp_diurnal": 0.6475,
+      "corr_wind": 0.6804
+    },
+    {
+      "utc_offset_h": 5,
+      "corr_temp_diurnal": 0.791,
+      "corr_wind": 0.7195
+    },
+    {
+      "utc_offset_h": 6,
+      "corr_temp_diurnal": 0.8694,
+      "corr_wind": 0.7286
+    },
+    {
+      "utc_offset_h": 7,
+      "corr_temp_diurnal": 0.8754,
+      "corr_wind": 0.7065
+    },
+    {
+      "utc_offset_h": 8,
+      "corr_temp_diurnal": 0.8115,
+      "corr_wind": 0.6594
+    },
+    {
+      "utc_offset_h": 9,
+      "corr_temp_diurnal": 0.6887,
+      "corr_wind": 0.5966
+    }
+  ],
+  "models": {
+    "ecmwf": "ecmwf_ifs025",
+    "gfs": "gfs_seamless"
+  },
+  "issue_hour_utc": 0,
+  "publish_delay_h": 8,
+  "horizon_h": 48,
+  "train_rows": 35074,
+  "train_period_utc": [
+    "2024-01-19 11:00:00",
+    "2026-01-31 16:00:00"
+  ],
+  "test_rows": 1392,
+  "features": [
+    "lead_hour",
+    "day_offset",
+    "ecmwf_ws10",
+    "ecmwf_ws100",
+    "ecmwf_wd100_sin",
+    "ecmwf_wd100_cos",
+    "ecmwf_t2m",
+    "gfs_ws10",
+    "gfs_ws100",
+    "gfs_wd100_sin",
+    "gfs_wd100_cos",
+    "gfs_gust10",
+    "gfs_t2m",
+    "ecmwf_shear",
+    "ecmwf_rho_ws3",
+    "gfs_shear",
+    "gfs_rho_ws3",
+    "ens_ws100",
+    "ens_ws100_spread",
+    "ens_ws10",
+    "ens_gust10",
+    "ens_t2m",
+    "ens_wd100_sin",
+    "ens_wd100_cos",
+    "hour_local",
+    "hour_sin",
+    "hour_cos",
+    "doy_sin",
+    "doy_cos",
+    "month"
+  ],
+  "built_at": "2026-09-23T08:49:43.666883+00:00"
+}
