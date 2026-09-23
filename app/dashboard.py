@@ -85,12 +85,13 @@ def show_chart(chart) -> None:
 
 # ------------------------------------------------------------------- данные
 def mtime(path: Path) -> float:
-    """Время изменения файла — часть ключа кэша: новый файл сразу перечитывается."""
+    """Время изменения файла — часть ключа кэша: новый файл сразу перечитывается.
+    (Имена параметров кэшируемых функций без «_»: такие Streamlit исключает из ключа.)"""
     return path.stat().st_mtime if path.exists() else 0.0
 
 
 @st.cache_data
-def _load_parquet(name: str, _mtime: float) -> pd.DataFrame | None:
+def _load_parquet(name: str, file_mtime: float) -> pd.DataFrame | None:
     p = C.PROCESSED_DIR / name
     return pd.read_parquet(p) if p.exists() else None
 
@@ -100,7 +101,7 @@ def load_parquet(name: str) -> pd.DataFrame | None:
 
 
 @st.cache_data
-def _load_forecasts(_mtimes: tuple) -> dict[str, pd.DataFrame]:
+def _load_forecasts(file_mtimes: tuple) -> dict[str, pd.DataFrame]:
     out = {}
     for name, path in FORECAST_FILES.items():
         if path.exists():
@@ -139,12 +140,22 @@ def run_checks(fc: pd.DataFrame, prev: pd.DataFrame | None) -> list[tuple[str, s
     """
     res = []
     p = fc["power_pred"] if "power_pred" in fc else pd.Series(dtype=float)
-    n_ok = int(p.notna().sum())
-    res.append(("ok" if n_ok == C.HORIZON_H and len(p) == C.HORIZON_H else "warn",
-                f"Полный горизонт {C.HORIZON_H} ч",
-                f"{n_ok} из {C.HORIZON_H} часов с прогнозом" + ("" if n_ok == C.HORIZON_H else " — прогноз неполный")))
-    if n_ok == 0:
-        return res  # пустой прогноз: остальные проверки не имеют смысла
+    times = pd.to_datetime(fc["target_time"]) if "target_time" in fc else pd.Series(dtype="datetime64[ns]")
+    if len(fc) == 0 or p.notna().sum() == 0:
+        res.append(("warn", f"Полный горизонт {C.HORIZON_H} ч", "прогноз пустой"))
+        return res  # остальные проверки не имеют смысла
+    # Ожидаемая сетка: момент выпуска + 0…47 ч, каждый час ровно один раз
+    start = pd.Timestamp(fc["issue_time"].iloc[0]) if "issue_time" in fc else times.min()
+    expected = set(pd.date_range(start, periods=C.HORIZON_H, freq="h"))
+    got = list(times[p.notna().to_numpy()])
+    dups = len(got) - len(set(got))
+    missing = len(expected - set(got))
+    extra = len(set(got) - expected)
+    ok_grid = dups == 0 and missing == 0 and extra == 0
+    note = "все 48 часов на месте, без дублей" if ok_grid else ", ".join(
+        x for x in [f"нет {missing} ч" if missing else "", f"дублей: {dups}" if dups else "",
+                    f"лишних часов: {extra}" if extra else ""] if x) + " — прогноз неполный"
+    res.append(("ok" if ok_grid else "warn", f"Полный горизонт {C.HORIZON_H} ч", note))
     bad = int(((p < 0) | (p > 1) | p.isna()).sum())
     res.append(("ok" if bad == 0 else "warn", "Значения в диапазоне 0–100%",
                 "все значения в диапазоне" if bad == 0 else f"{bad} ч вне диапазона или пустые"))

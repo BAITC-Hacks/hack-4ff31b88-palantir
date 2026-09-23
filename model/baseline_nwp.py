@@ -123,7 +123,11 @@ def main() -> None:
     table.to_csv(MODEL_DIR / "metrics_baseline.csv", index=False)
 
     # Финальные кривые — на всей истории; прогноз на февраль как запасной вариант
-    curves = fit_curves(train_all)
+    # Итоговая кривая для февраля: только наблюдения, известные к первому выпуску
+    # (час закончился не позже 31.01 00:00 UTC), — иначе первый выпуск видел бы будущее.
+    first_issue = pd.Timestamp(C.TEST_FIRST_ISSUE) + pd.Timedelta(hours=C.ISSUE_HOUR_UTC)
+    known = pd.to_datetime(train_all["target_time"]) + pd.Timedelta(hours=1) <= first_issue
+    curves = fit_curves(train_all[known])
     CURVE_PATH.write_text(json.dumps(curves, indent=1), encoding="utf-8")
     test = pd.read_parquet(C.PROCESSED_DIR / "test_features.parquet")
     fc = predict(test, curves)[["issue_time", "target_time", "target_time_local", "lead_hour", "power_pred"]]

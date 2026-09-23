@@ -75,6 +75,8 @@ python agent_backtest.py --mode lightgbm --trained-through 2025-12-31T18:00:00+0
 
 Нужен Python 3.10+. Исходные CSV организаторов уже лежат в `data/raw/`.
 
+На Windows, если команда `python` открывает Microsoft Store или не находится, используйте лаунчер `py` вместо `python` (например, `py -m pip install -r requirements.txt`). На Linux и macOS может понадобиться `python3`.
+
 ```bash
 python -m pip install -r requirements.txt
 python -m data.build_dataset       # архив прогнозов Open-Meteo + SCADA -> data/processed/
