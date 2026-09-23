@@ -46,7 +46,10 @@ SCADA_END_LOCAL = "2026-01-31 23:59"
 TEST_FIRST_ISSUE = "2026-01-31"
 TEST_LAST_ISSUE = "2026-02-28"
 
-DEFAULT_UTC_OFFSET_H = 5  # Казахстан (единый UTC+5 с 01.03.2024)
+# SCADA живёт по UTC+6 (старое время Алматы): в марте 2024 Казахстан перешёл
+# на UTC+5, но в данных нет скачка на 01.03.2024 — часы SCADA не переводили.
+# Подтверждено корреляцией ветра SCADA с прогнозом ECMWF (максимум на +6).
+DEFAULT_UTC_OFFSET_H = 6
 META_PATH = PROCESSED_DIR / "meta.json"
 
 

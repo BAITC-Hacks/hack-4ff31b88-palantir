@@ -33,8 +33,9 @@ def nwp_hourly(arch: pd.DataFrame, short: str, n: int = 1) -> pd.Series:
 def detect_utc_offset(local: pd.DataFrame, arch: pd.DataFrame, candidates=range(3, 10)) -> tuple[int, pd.DataFrame]:
     """Подбирает сдвиг SCADA-времени к UTC по корреляции с прогнозом NWP.
 
-    Суточный ход температуры смещается ровно на ошибку сдвига,
-    поэтому корреляция суточных аномалий температуры резко падает при неверном k.
+    Решает корреляция ветра: скорость на гондоле и прогноз на 100 м — одна высота.
+    Температура только для справки: датчик на гондоле (~100 м), там суточный ход
+    отстаёт от прогноза на 2 м, и по температуре сдвиг выходит на час больше.
     """
     ws = nwp_hourly(arch, "ws100")
     t2 = nwp_hourly(arch, "t2m")
@@ -50,7 +51,7 @@ def detect_utc_offset(local: pd.DataFrame, arch: pd.DataFrame, candidates=range(
             "corr_wind": s["ws"].corr(ws.reindex(s.index)),
         })
     table = pd.DataFrame(rows).set_index("utc_offset_h")
-    return int(table["corr_temp_diurnal"].idxmax()), table
+    return int(table["corr_wind"].idxmax()), table
 
 
 def daily_issues(first, last, hour: int = C.ISSUE_HOUR_UTC) -> pd.DatetimeIndex:

@@ -2,7 +2,3 @@ data/cache/
 data/cache_mock/
 __pycache__/
 *.pyc
-.venv/
-.env
-runs/
-charts/
