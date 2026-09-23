@@ -15,26 +15,15 @@ sys.path.insert(0, str(ROOT))
 import altair as alt
 import pandas as pd
 import streamlit as st
+from streamlit.components.v1 import html as component_html
 
 from repository_agent import AgentError, DEFAULT_MODEL, ask
 from repository_data import RepositoryData, RepositoryDataError
+from app.wind_scene import wind_scene_html
 
 
 st.set_page_config(page_title="Palantir · Агент данных", page_icon="◈", layout="wide")
-st.markdown(
-    """<style>
-    .block-container {max-width: 1480px; padding-top: 4rem; padding-bottom: 3rem;}
-    [data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.2);
-      border-radius: 14px; padding: 16px 20px;}
-    [data-testid="stMetricLabel"] {font-size: .85rem;}
-    [data-testid="stMetricValue"] {font-size: 1.8rem;}
-    .eyebrow {font-size:.72rem; letter-spacing:.17em; font-weight:700;
-      color:#1b9d8a; margin-bottom:.45rem;}
-    h1 {letter-spacing:-.035em;}
-    [data-testid="stSidebar"] .block-container {padding-top:1.5rem;}
-    </style>""",
-    unsafe_allow_html=True,
-)
+st.html("<style>" + (ROOT / "app" / "agent_theme.css").read_text(encoding="utf-8") + "</style>")
 
 
 def value(number, *, percent: bool = False, digits: int = 1) -> str:
@@ -69,13 +58,13 @@ def forecast_chart(frame: pd.DataFrame, timezone_label: str) -> alt.Chart:
     return (
         alt.Chart(chart_data)
         .mark_area(
-            line={"color": "#19a48e", "strokeWidth": 2},
+            line={"color": "#a2efd2", "strokeWidth": 2.2},
             color=alt.Gradient(
                 gradient="linear", x1=0, y1=0, x2=0, y2=1,
-                stops=[alt.GradientStop(color="#19a48e", offset=0),
+                stops=[alt.GradientStop(color="#55caa4", offset=0),
                        alt.GradientStop(color="transparent", offset=1)],
             ),
-            opacity=0.3,
+            opacity=0.65,
         )
         .encode(
             x=alt.X("local_time:T", title=f"Местное время SCADA ({timezone_label})",
@@ -86,7 +75,10 @@ def forecast_chart(frame: pd.DataFrame, timezone_label: str) -> alt.Chart:
                      alt.Tooltip("power_percent:Q", title="Мощность, %", format=".2f"),
                      alt.Tooltip("issue_time:N", title="Выпуск, UTC")],
         )
-        .properties(height=290)
+        .properties(height=290, background="transparent")
+        .configure_view(strokeOpacity=0)
+        .configure_axis(labelColor="#a7c0c7", titleColor="#b7d0d2", gridColor="#28434a",
+                        gridOpacity=0.55, domainColor="#28434a", tickColor="#28434a", titleFontWeight=400)
     )
 
 
@@ -120,10 +112,12 @@ def render_chat(run_id: str, model: str, api_ready: bool) -> None:
                          use_container_width=True):
                 pending = suggestion
 
-    with st.container(height=320, border=False):
+    with st.container(border=False, **({"height": 320} if messages else {})):
         if not messages:
-            st.caption("Например: «Покажи прогноз на 10 февраля» или "
-                       "«Сравни качество моделей на январе».")
+            st.markdown('<div class="chat-empty"><div class="chat-empty-symbol">✦</div>'
+                        '<strong>От данных — к пониманию</strong>'
+                        '<p>Задайте вопрос о выработке, сравните модели '
+                        'или разберите предупреждения агента.</p></div>', unsafe_allow_html=True)
         for message in messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
@@ -291,10 +285,18 @@ def main() -> None:
             st.warning("Ключ API не задан")
         st.caption("Запрос к OpenAI выполняется только при отправке вопроса. "
                    "Обычный просмотр данных не расходует API-баланс.")
+        st.divider()
+        animation_enabled = st.toggle("Анимация ветропарка", value=True, key="wind_animation")
 
-    st.markdown('<div class="eyebrow">WIND FORECAST · REPOSITORY INTELLIGENCE</div>', unsafe_allow_html=True)
-    st.title("Palantir · Агент данных")
-    st.write("Прогноз мощности, результаты бэктеста и проверки — с ответами по файлам репозитория.")
+    # Keep animated SVG in its own document: st.html sanitizes inline SVG away.
+    component_html(wind_scene_html(animate=animation_enabled), height=0, scrolling=False, tab_index=-1)
+    with st.container(key="hero"):
+        st.markdown('<div class="eyebrow">Энергия ветра · Аналитика</div>', unsafe_allow_html=True)
+        st.title("Palantir · Агент данных")
+        st.markdown('<p class="hero-lead">Понимайте каждый час выработки. '
+                    'Прогнозы, проверки и ответы агента — в одном пространстве.</p>', unsafe_allow_html=True)
+        st.markdown('<div class="hero-badges"><span><i class="dot"></i>Прогноз на 48 часов</span>'
+                    '<span>ECMWF + GFS</span><span>Исторические данные</span></div>', unsafe_allow_html=True)
     st.caption(f"Выбранный прогон: {run_id}")
 
     try:
@@ -308,7 +310,8 @@ def main() -> None:
         st.stop()
     summary = overview.get("summary", {})
     check_totals = overview.get("checks", {})
-    cards = st.columns(4)
+    with st.container(key="overview_metrics"):
+        cards = st.columns(4)
     cards[0].metric("Принято выпусков", f"{summary.get('accepted_runs', '—')} / {summary.get('runs', '—')}")
     cards[1].metric("Часов февраля", f"{summary.get('february_hours', '—')} / {summary.get('expected_february_hours', '—')}")
     cards[2].metric("Ошибок проверки", value(check_totals.get("errors"), digits=0))
@@ -322,8 +325,9 @@ def main() -> None:
                 st.warning(str(issue))
 
     st.divider()
-    forecast_col, chat_col = st.columns([1.35, 1], gap="large")
-    with forecast_col:
+    with st.container(key="workspace_panels"):
+        forecast_col, chat_col = st.columns([1.35, 1], gap="large")
+    with forecast_col, st.container(border=True, key="forecast_panel"):
         st.subheader("Итоговый прогноз")
         timezone_label = complete_forecast.get("timezone", "UTC+6")
         st.caption(f"Для каждого часа — самый свежий принятый выпуск. Время SCADA: {timezone_label}.")
@@ -356,7 +360,7 @@ def main() -> None:
                     mini[0].metric("Средняя", value(statistics.get("mean_power"), percent=True))
                     mini[1].metric("Пик", value(statistics.get("max_power"), percent=True))
                     mini[2].metric("Часов", str(payload.get("total_rows", len(shown))))
-                    st.altair_chart(forecast_chart(shown, timezone_label), use_container_width=True)
+                    st.altair_chart(forecast_chart(shown, timezone_label), use_container_width=True, theme=None)
                     with st.expander("Почасовая таблица и CSV"):
                         table = shown.copy()
                         table["power_percent"] = pd.to_numeric(table["power_pred"], errors="coerce") * 100
@@ -373,7 +377,7 @@ def main() -> None:
                                    "Сузьте период, чтобы увидеть и скачать все его данные.")
                     sources(payload.get("sources", []))
     with chat_col:
-        with st.container(border=True):
+        with st.container(border=True, key="chat_panel"):
             render_chat(run_id, model, api_ready)
 
     st.divider()
@@ -387,6 +391,8 @@ def main() -> None:
         st.caption("Сохранённые результаты выбранного прогона. Время выпуска — UTC.")
         st.json(summary, expanded=True)
         sources(overview.get("sources", []))
+    st.markdown('<div class="page-footer"><span>Palantir / Wind intelligence</span>'
+                '<span>Прогноз · Анализ · Решение</span></div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
