@@ -26,17 +26,18 @@ def _numeric_frame(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def metric_rows(df: pd.DataFrame) -> pd.DataFrame:
+def metric_rows(df: pd.DataFrame, pred_col: str = "power_pred",
+                model_name: str = "lightgbm", target_col: str = TARGET) -> pd.DataFrame:
     buckets = {"1-24h": df["lead_hour"].between(1, 24),
                "25-48h": df["lead_hour"].between(25, 48),
                "all": df["lead_hour"].between(1, 48)}
     rows = []
     for horizon, mask in buckets.items():
         part = df.loc[mask]
-        y, p = part[TARGET].to_numpy(), part["power_pred"].to_numpy()
+        y, p = part[target_col].to_numpy(), part[pred_col].to_numpy()
         ok = np.isfinite(y) & np.isfinite(p)
         err = p[ok] - y[ok]
-        rows.append({"model": "lightgbm", "horizon": horizon,
+        rows.append({"model": model_name, "horizon": horizon,
                      "nMAE_%": 100 * np.abs(err).mean() if ok.any() else np.nan,
                      "nRMSE_%": 100 * np.sqrt(np.mean(err ** 2)) if ok.any() else np.nan,
                      "bias_%": 100 * err.mean() if ok.any() else np.nan,
@@ -78,6 +79,7 @@ def predict(df: pd.DataFrame, model=None) -> pd.DataFrame:
 def main() -> None:
     train = pd.read_parquet(C.PROCESSED_DIR / "train.parquet")
     test = pd.read_parquet(C.PROCESSED_DIR / "test_features.parquet")
+    scada = pd.read_parquet(C.PROCESSED_DIR / "scada_hourly.parquet")
     features = [c for c in feature_columns(train) if c != "day_offset"]
     model, fit_rows = train_model(train, features)
     model.booster_.save_model(str(MODEL_PATH))
@@ -86,11 +88,31 @@ def main() -> None:
         VALID_START, VALID_END, inclusive="left")].copy()
     metrics = metric_rows(predict(valid, model))
     metrics.to_csv(METRICS_PATH, index=False)
-    predict(test, model)[["issue_time", "target_time", "target_time_local", "lead_hour", "power_pred"]].to_csv(
+    feb = predict(test, model)
+    feb[["issue_time", "target_time", "target_time_local", "lead_hour", "power_pred"]].to_csv(
         MODEL_DIR / "forecast_lgbm_feb.csv", index=False)
+    # В test_features нет target по контракту датасета. Подтягиваем фактическую
+    # мощность из почасовой SCADA и считаем сравнение с тремя бейзлайнами.
+    from model.baseline_nwp import climatology, fit_curves, persistence, predict as curve_predict
+    feb["power"] = scada["power"].reindex(pd.to_datetime(feb["target_time"])).to_numpy()
+    curves = fit_curves(train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START])
+    feb["power_curve"] = curve_predict(feb, curves)["power_pred"].to_numpy()
+    fit = train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START]
+    feb["climatology"] = climatology(fit, feb).to_numpy()
+    feb["persistence"] = persistence(feb, scada).to_numpy()
+    feb_metrics = pd.concat([
+        metric_rows(feb, "power_pred", "lightgbm", "power"),
+        metric_rows(feb, "power_curve", "power_curve", "power"),
+        metric_rows(feb, "climatology", "climatology", "power"),
+        metric_rows(feb, "persistence", "persistence", "power"),
+    ], ignore_index=True)
+    feb_metrics.to_csv(MODEL_DIR / "metrics_february.csv", index=False)
     print(f"Обучение: {fit_rows} строк, признаков: {len(features)}")
     print(metrics[["horizon", "nMAE_%", "n"]].to_string(index=False))
+    print("Февраль 2026, сравнение с бейзлайнами (nMAE, %):")
+    print(feb_metrics.pivot(index="model", columns="horizon", values="nMAE_%").to_string())
 
 
 if __name__ == "__main__":
     main()
+
