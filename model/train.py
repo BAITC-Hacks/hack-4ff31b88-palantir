@@ -51,9 +51,11 @@ def train_model(train: pd.DataFrame, features: list[str]):
     except ImportError as exc:
         raise RuntimeError("LightGBM не установлен. Выполните `pip install -r requirements.txt`.") from exc
     fit = train.loc[pd.to_datetime(train["target_time_local"]) < VALID_START]
+    # Часы простоя/ограничений в power_clean пустые: LightGBM не принимает NaN в цели.
+    fit = fit.dropna(subset=[TARGET])
     model = lgb.LGBMRegressor(objective="regression_l1", n_estimators=700,
                                learning_rate=0.03, num_leaves=31,
-                               subsample=0.85, colsample_bytree=0.9,
+                               subsample=0.85, subsample_freq=1, colsample_bytree=0.9,
                                reg_lambda=1.0, random_state=42, verbosity=-1)
     model.fit(_numeric_frame(fit, features), fit[TARGET].clip(0, 1))
     return model, len(fit)
@@ -86,7 +88,8 @@ def main() -> None:
     FEATURES_PATH.write_text(json.dumps(features, ensure_ascii=False, indent=2), encoding="utf-8")
     valid = train.loc[pd.to_datetime(train["target_time_local"]).between(
         VALID_START, VALID_END, inclusive="left")].copy()
-    metrics = metric_rows(predict(valid, model))
+    # Оцениваем по фактической мощности power — так же, как бейзлайны в baseline_nwp.
+    metrics = metric_rows(predict(valid, model), target_col="power")
     metrics.to_csv(METRICS_PATH, index=False)
     feb = predict(test, model)
     feb[["issue_time", "target_time", "target_time_local", "lead_hour", "power_pred"]].to_csv(
@@ -112,8 +115,12 @@ def main() -> None:
     feb_metrics.to_csv(MODEL_DIR / "metrics_february.csv", index=False)
     print(f"Обучение: {fit_rows} строк, признаков: {len(features)}")
     print(metrics[["horizon", "nMAE_%", "n"]].to_string(index=False))
-    print("Февраль 2026, сравнение с бейзлайнами (nMAE, %):")
-    print(feb_metrics.pivot(index="model", columns="horizon", values="nMAE_%").to_string())
+    if feb_metrics["n"].sum() == 0:
+        print("Февраль 2026: фактической SCADA за февраль нет — метрики появятся, "
+              "когда данные будут в data/raw/.")
+    else:
+        print("Февраль 2026, сравнение с бейзлайнами (nMAE, %):")
+        print(feb_metrics.pivot(index="model", columns="horizon", values="nMAE_%").to_string())
 
 
 if __name__ == "__main__":
