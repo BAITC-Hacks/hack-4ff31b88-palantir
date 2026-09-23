@@ -1,0 +1,6 @@
+{
+  "model_name": "team_nwp_power_curve_baseline",
+  "training_data_available_at": "2026-01-31T17:00:00+00:00",
+  "basis": "baseline_nwp.main fits final curves on train_all; data/processed/meta.json train end is 2026-01-31 16:00 UTC, hourly target available one hour later",
+  "curve_blob_sha": "7fcb3bc0fae19f611c79e7887cbf4f23436019ac"
+}
