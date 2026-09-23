@@ -1,6 +1,6 @@
 {
-  "utc_offset_h": 7,
-  "utc_offset_detected_h": 7,
+  "utc_offset_h": 6,
+  "utc_offset_detected_h": 6,
   "tz_check": [
     {
       "utc_offset_h": 3,
@@ -45,10 +45,10 @@
   "issue_hour_utc": 0,
   "publish_delay_h": 8,
   "horizon_h": 48,
-  "train_rows": 35074,
+  "train_rows": 35076,
   "train_period_utc": [
     "2024-01-19 11:00:00",
-    "2026-01-31 16:00:00"
+    "2026-01-31 17:00:00"
   ],
   "test_rows": 1392,
   "features": [
@@ -83,5 +83,5 @@
     "doy_cos",
     "month"
   ],
-  "built_at": "2026-09-23T09:21:14.580905+00:00"
+  "built_at": "2026-09-23T09:26:45.467222+00:00"
 }
