@@ -29,7 +29,7 @@ FORECAST_FILES = {  # имя на графике -> файл с прогнозо
     "LightGBM": MODEL_DIR / "forecast_lgbm_feb.csv",
     "Кривая мощности": MODEL_DIR / "forecast_baseline_feb.csv",
 }
-AGENT_LOG_DIRS = [ROOT / "agent" / "output", ROOT / "agent" / "logs", ROOT / "outputs"]
+AGENT_RUN_ROOTS = [ROOT / "artifacts", ROOT / "outputs"]  # куда agent_backtest.py пишет --out
 SPREAD_ALERT_MS = 3.0     # расхождение ECMWF и GFS, при котором прогноз считаем неуверенным
 JUMP_ALERT = 0.4          # скачок мощности за час (доля от установленной)
 
@@ -45,9 +45,9 @@ def theme() -> str:
 def palette() -> dict:
     """Категориальная палитра (проверена на различимость при дальтонизме)."""
     if theme() == "dark":
-        return {"LightGBM": "#3987e5", "Кривая мощности": "#d95926", "Живой запуск": "#3987e5",
+        return {"LightGBM": "#3987e5", "Кривая мощности": "#d95926", "Живой запуск": "#3987e5", "Итоговый прогноз агента": "#3987e5",
                 "Сохранённый выпуск 00:00 UTC": "#d95926", "ECMWF": "#199e70", "GFS": "#9085e9", "Факт": "#c3c2b7"}
-    return {"LightGBM": "#2a78d6", "Кривая мощности": "#eb6834", "Живой запуск": "#2a78d6",
+    return {"LightGBM": "#2a78d6", "Кривая мощности": "#eb6834", "Живой запуск": "#2a78d6", "Итоговый прогноз агента": "#2a78d6",
             "Сохранённый выпуск 00:00 UTC": "#eb6834", "ECMWF": "#1baf7a", "GFS": "#4a3aa7", "Факт": "#52514e"}
 
 
@@ -242,19 +242,53 @@ with tab_check:
     prev = prev[prev["issue_time"] == prev_issue[-1]] if prev_issue else None
     show_checks(run_checks(fc, prev))
 
-    logs = [p for d in AGENT_LOG_DIRS if d.exists() for p in sorted(d.glob("*"))
-            if p.suffix in {".json", ".jsonl", ".log", ".txt", ".csv", ".md"}]
     st.divider()
-    st.subheader("Журнал агента")
-    if logs:
-        pick = st.selectbox("Файл", logs, index=len(logs) - 1, format_func=lambda p: str(p.relative_to(ROOT)))
-        text = pick.read_text(encoding="utf-8", errors="replace")
-        if pick.suffix == ".csv":
-            st.dataframe(pd.read_csv(pick), hide_index=True)
-        else:
-            st.code(text[-20000:], language="json" if pick.suffix in {".json", ".jsonl"} else None)
+    st.subheader("Журнал агента (agent_backtest.py)")
+    runs_dirs = sorted({p.parent for r in AGENT_RUN_ROOTS if r.exists() for p in r.rglob("summary.json")},
+                       key=lambda d: d.stat().st_mtime, reverse=True)
+    if not runs_dirs:
+        st.info("Журнал появится после бэктеста: `python agent_backtest.py --mode lightgbm "
+                "--trained-through 2025-12-31T18:00:00+00:00 --out artifacts/agent_lgbm`.")
     else:
-        st.info("Журнал появится после запуска агента (папка agent/output или outputs/).")
+        run_dir = st.selectbox("Прогон агента", runs_dirs, format_func=lambda d: str(d.relative_to(ROOT)))
+        summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+        k = st.columns(4)
+        k[0].metric("Режим", summary.get("mode", "—"))
+        k[1].metric("Принято выпусков", f"{summary.get('accepted_runs')} из {summary.get('runs')}")
+        k[2].metric("Часов февраля", f"{summary.get('february_hours')} из {summary.get('expected_february_hours')}")
+        k[3].metric("Пересчитано точек", summary.get("replaced_points", "—"))
+
+        runs_path = run_dir / "runs.jsonl"
+        if runs_path.exists():
+            runs = [json.loads(line) for line in runs_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            table = pd.DataFrame([{
+                "Выпуск (UTC)": r["issue_time"][:16].replace("T", " "),
+                "Решение": "✅ принят" if r["analysis"]["accepted"] else "⛔ отклонён",
+                "Ошибок": len(r["analysis"]["errors"]),
+                "Предупреждений": len(r["analysis"]["warnings"]),
+                "Пересчитано ч": r.get("replaced_points", 0),
+                "Ср. изменение": r["analysis"].get("mean_abs_revision"),
+                "Резюме": (r["analysis"].get("summary") or {}).get("text", ""),
+            } for r in runs])
+            st.dataframe(table.round({"Ср. изменение": 3}), hide_index=True)
+            this = next((r for r in runs if pd.Timestamp(r["issue_time"]).tz_convert(None) == issue), None)
+            if this is not None:
+                with st.expander(f"Подробно: выпуск {labels[issue]}"):
+                    s_ = this["analysis"].get("summary") or {}
+                    st.markdown(f"**Резюме ({'LLM' if s_.get('source') == 'llm' else 'правила'}):** {s_.get('text', '—')}")
+                    st.json({"errors": this["analysis"]["errors"], "warnings": this["analysis"]["warnings"]}, expanded=False)
+
+        latest = run_dir / "february_latest.csv"
+        if latest.exists():
+            fl = pd.read_csv(latest)
+            fl["time"] = pd.to_datetime(fl["target_time_local"].str.slice(0, 19))
+            st.subheader("Итоговый прогноз на февраль: для каждого часа — самый свежий принятый выпуск")
+            show_chart(line_chart(pd.DataFrame({"time": fl["time"], "series": "Итоговый прогноз агента",
+                                                "value": 100 * fl["power_pred"]}),
+                                  "Мощность, %", ".0f", height=260, y_domain=[0, 100]))
+            st.download_button("Скачать итоговый прогноз (CSV)", latest.read_bytes(),
+                               file_name="february_forecast.csv", mime="text/csv")
+
 
 # ---- 3. качество
 with tab_quality:

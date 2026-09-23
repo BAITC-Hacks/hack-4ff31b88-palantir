@@ -1,0 +1,4 @@
+# Единые переводы строк (LF в репозитории), чтобы Windows и Linux не давали ложных конфликтов
+* text=auto
+*.parquet binary
+*.sqlite binary
