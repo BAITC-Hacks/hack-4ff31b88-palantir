@@ -18,7 +18,7 @@ persistence, climatology и power curve за февраль в `model/metrics_fe
 
 | Модель | 1–24 ч | 25–48 ч | Все горизонты |
 |---|---:|---:|---:|
-| Persistence | 30.53% | 33.76% | 32.14% |
+| Persistence | 30.83% | 36.55% | 33.69% |
 | Climatology | 29.40% | 29.40% | 29.40% |
-| Power curve | 21.81% | 21.92% | 21.86% |
+| Power curve | 21.35% | 21.53% | 21.44% |
 
