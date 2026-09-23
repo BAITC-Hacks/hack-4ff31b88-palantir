@@ -10,6 +10,9 @@ Hackathon team repository for Palantir
 
 `nMAE = 100 * mean(abs(y - pred))`; результаты LightGBM записываются в
 `model/metrics_lgbm.csv`, прогноз февраля — в `model/forecast_lgbm_feb.csv`.
+После появления фактической SCADA скрипт также записывает сравнение LightGBM,
+persistence, climatology и power curve за февраль в `model/metrics_february.csv`
+с разбиением на горизонты 1–24 и 25–48 часов.
 
 Бейзлайны на январе 2026:
 
@@ -18,3 +21,4 @@ Hackathon team repository for Palantir
 | Persistence | 30.53% | 33.76% | 32.14% |
 | Climatology | 29.40% | 29.40% | 29.40% |
 | Power curve | 21.81% | 21.92% | 21.86% |
+
